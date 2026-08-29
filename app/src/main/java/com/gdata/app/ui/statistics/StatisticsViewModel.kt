@@ -6,6 +6,7 @@ import com.gdata.app.data.repository.AppUsageRow
 import com.gdata.app.data.repository.DayUsageRow
 import com.gdata.app.data.repository.NetworkStatsRepository
 import com.gdata.app.domain.manager.ModeManager
+import com.gdata.app.domain.model.ModePolicy
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -77,10 +78,11 @@ class StatisticsViewModel @Inject constructor(
                 emptyList()
             }
 
+            val mode = modeManager.currentMode.first()
             val optOn = modeManager.isOptimizationEnabled.first()
-            val saved = if (optOn && usage.totalBytes > 0) {
-                (usage.totalBytes * 0.18).toLong()
-            } else 0L
+            val gaming = modeManager.isGamingModeEnabled.first()
+            val factor = ModePolicy.estimatedSavingsFactor(mode, optOn && !gaming)
+            val saved = (usage.totalBytes * factor).toLong()
 
             _uiState.value = StatisticsUiState(
                 isLoading = false,
