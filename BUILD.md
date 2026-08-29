@@ -1,48 +1,35 @@
-# How to build G Data
+# Build G Data on GitHub (no Android Studio required)
 
-## Why it failed before
-The repository was missing:
-- Application class & MainActivity
-- Theme / resource files
-- Correct Compose Compiler setup for Kotlin 2.0
-- Gradle wrapper properties
+## Automatic build
 
-Those are now fixed on `main`.
+Every push to `main` runs **GitHub Actions** and produces a debug APK.
 
-## Build with Android Studio (recommended)
-1. Install [Android Studio](https://developer.android.com/studio) (Ladybug or newer).
-2. **File → Open** → select the `G-Data` folder (the one that contains `settings.gradle.kts`).
-3. Let Gradle sync (Android Studio will download the Gradle wrapper automatically if needed).
-4. Click **Run** (green play) on an emulator or device.
+### How to get the APK
 
-## Build from command line
-You need the Android SDK and a JDK 17+.
+1. Open: https://github.com/Jeffery24344/G-Data/actions
+2. Click the latest **Build APK** run (green check = success).
+3. Scroll to **Artifacts**.
+4. Download **G-Data-debug-apk**.
+5. Unzip and install `app-debug.apk` on your Android phone.
 
-```bash
-git clone https://github.com/Jeffery24344/G-Data.git
-cd G-Data
+### Manual rebuild
 
-# Generate wrapper if gradlew is missing (requires Gradle installed once):
-gradle wrapper --gradle-version 8.9
+1. Go to **Actions** → **Build APK**.
+2. Click **Run workflow** → **Run workflow**.
+3. Wait 2–5 minutes, then download the artifact.
 
-# Then:
-./gradlew assembleDebug
-```
+### Install on phone
 
-APK output: `app/build/outputs/apk/debug/app-debug.apk`
+- Enable **Install unknown apps** for your file manager/browser.
+- Open the downloaded APK and install.
 
-## GitHub Codespaces
-1. Open the repo on GitHub → **Code** → **Codespaces** → Create.
-2. In the terminal, install Android command-line tools / SDK, then run `./gradlew assembleDebug` (after generating the wrapper).
+---
 
-## Common errors
+## If the workflow fails
 
-| Error | Fix |
-|-------|-----|
-| `SDK location not found` | Create `local.properties` with `sdk.dir=/path/to/Android/Sdk` |
-| Compose compiler mismatch | Already fixed: uses `org.jetbrains.kotlin.plugin.compose` |
-| Missing icon | Adaptive icon + drawable foreground are in `res/` |
-| Hilt / KSP errors | Ensure KSP version matches Kotlin (see root `build.gradle.kts`) |
+Open the failed job → open the red step → copy the error text.  
+Paste it here and it can be fixed in the next commit.
 
-## Current status
-Minimal app **should compile and launch** showing a placeholder “G Data” screen. Full feature screens (Home, Apps, Statistics, etc.) can be added on top of this working base.
+Common first-time notes:
+- First run may take longer while Gradle and the Android SDK download.
+- You need Actions enabled on the repo (default for public repos).
