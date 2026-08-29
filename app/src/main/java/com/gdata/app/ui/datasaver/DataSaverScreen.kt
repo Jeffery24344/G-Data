@@ -61,29 +61,46 @@ fun DataSaverScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text("Data Saver", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            ModePolicy.activeSummary(state.mode, state.optimizationEnabled, state.gamingMode),
+            text = "Data Saver",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = ModePolicy.activeSummary(
+                state.mode,
+                state.optimizationEnabled,
+                state.gamingMode
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("DATA OPTIMIZATION", fontWeight = FontWeight.Bold)
+                    Text(text = "DATA OPTIMIZATION", fontWeight = FontWeight.Bold)
                     Text(
-                        if (state.optimizationEnabled) "Active" else "Paused",
-                        color = if (state.optimizationEnabled) Primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        text = if (state.optimizationEnabled) "Active" else "Paused",
+                        color = if (state.optimizationEnabled) {
+                            Primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
                     )
                 }
                 Switch(
                     checked = state.optimizationEnabled,
-                    onCheckedChange = viewModel::setOptimizationEnabled,
+                    onCheckedChange = { viewModel.setOptimizationEnabled(it) },
                     colors = SwitchDefaults.colors(checkedTrackColor = Primary)
                 )
             }
@@ -94,58 +111,77 @@ fun DataSaverScreen(
             shape = RoundedCornerShape(16.dp),
             border = if (state.gamingMode) BorderStroke(2.dp, Primary) else null,
             colors = CardDefaults.cardColors(
-                containerColor = if (state.gamingMode) Primary.copy(alpha = 0.08f)
-                else MaterialTheme.colorScheme.surface
+                containerColor = if (state.gamingMode) {
+                    Primary.copy(alpha = 0.08f)
+                } else {
+                    MaterialTheme.colorScheme.surface
+                }
             )
         ) {
-            Row(modifier = Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
-                    Icons.Default.SportsEsports, null,
-                    tint = if (state.gamingMode) Primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    imageVector = Icons.Default.SportsEsports,
+                    contentDescription = null,
+                    tint = if (state.gamingMode) {
+                        Primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                     modifier = Modifier.size(32.dp)
                 )
-                Spacer(Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        if (state.gamingMode) "Gaming Mode Active 🎮" else "Gaming Mode",
+                        text = if (state.gamingMode) {
+                            "Gaming Mode Active 🎮"
+                        } else {
+                            "Gaming Mode"
+                        },
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "Forces Performance priority for responsiveness.",
+                        text = "Forces Performance priority for responsiveness.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
                     checked = state.gamingMode,
-                    onCheckedChange = viewModel::setGamingMode,
+                    onCheckedChange = { viewModel.setGamingMode(it) },
                     colors = SwitchDefaults.colors(checkedTrackColor = Primary)
                 )
             }
         }
 
-        Text("Optimization Mode", fontWeight = FontWeight.SemiBold)
+        Text(text = "Optimization Mode", fontWeight = FontWeight.SemiBold)
 
         ModeOptionCard(
-            OptimizationMode.PERFORMANCE, Icons.Outlined.Speed,
+            mode = OptimizationMode.PERFORMANCE,
+            icon = Icons.Outlined.Speed,
             selected = state.mode == OptimizationMode.PERFORMANCE && !state.gamingMode,
             enabled = state.optimizationEnabled && !state.gamingMode,
             onClick = { viewModel.setMode(OptimizationMode.PERFORMANCE) }
         )
         ModeOptionCard(
-            OptimizationMode.BALANCED, Icons.Outlined.Balance,
+            mode = OptimizationMode.BALANCED,
+            icon = Icons.Outlined.Balance,
             selected = state.mode == OptimizationMode.BALANCED && !state.gamingMode,
             enabled = state.optimizationEnabled && !state.gamingMode,
             onClick = { viewModel.setMode(OptimizationMode.BALANCED) }
         )
         ModeOptionCard(
-            OptimizationMode.EXTREME, Icons.Outlined.DataSaverOff,
+            mode = OptimizationMode.EXTREME,
+            icon = Icons.Outlined.DataSaverOff,
             selected = state.mode == OptimizationMode.EXTREME && !state.gamingMode,
             enabled = state.optimizationEnabled && !state.gamingMode,
             onClick = { viewModel.setMode(OptimizationMode.EXTREME) }
         )
 
-        // Active policy tips
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -153,37 +189,42 @@ fun DataSaverScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
             )
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("What this mode does", fontWeight = FontWeight.SemiBold)
-                ModePolicy.actionHints(
-                    if (state.gamingMode) OptimizationMode.PERFORMANCE else state.mode
-                ).forEach { tip ->
-                    Text("• $tip", style = MaterialTheme.typography.bodyMedium)
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(text = "What this mode does", fontWeight = FontWeight.SemiBold)
+                val hintsMode = if (state.gamingMode) {
+                    OptimizationMode.PERFORMANCE
+                } else {
+                    state.mode
+                }
+                ModePolicy.actionHints(hintsMode).forEach { tip ->
+                    Text(text = "• $tip", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
 
-        if (state.mode == OptimizationMode.EXTREME && state.optimizationEnabled && !state.gamingMode) {
+        if (state.mode == OptimizationMode.EXTREME &&
+            state.optimizationEnabled &&
+            !state.gamingMode
+        ) {
             Button(
                 onClick = {
                     try {
-                        context.startActivity(
-                            Intent(Settings.ACTION_DATA_SAVER_SETTINGS).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                        )
+                        val intent = Intent(Settings.ACTION_DATA_SAVER_SETTINGS)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
                     } catch (_: Exception) {
-                        context.startActivity(
-                            Intent(Settings.ACTION_WIRELESS_SETTINGS).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                            }
-                        )
+                        val fallback = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                        fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(fallback)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Open system Data Saver")
+                Text(text = "Open system Data Saver")
             }
         }
 
@@ -194,10 +235,17 @@ fun DataSaverScreen(
             ),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Outlined.Info, null, tint = Primary)
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = Primary
+                )
                 Text(
-                    "Android does not allow apps to silently rewrite all traffic without a VPN. " +
+                    text = "Android does not allow apps to silently rewrite all traffic without a VPN. " +
                         "G Data applies real policies: mode-based estimates, automatic rules " +
                         "(battery / remaining data / high usage), and shortcuts to system Data Saver. " +
                         "It never invents free data or fake speed boosts.",
@@ -225,21 +273,38 @@ private fun ModeOptionCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(
+                if (enabled) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         border = if (selected) BorderStroke(2.dp, Primary) else null,
         colors = CardDefaults.cardColors(containerColor = containerColor)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = if (selected) Primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(16.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) Primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(mode.displayName, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                Text(mode.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = mode.displayName, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = mode.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             RadioButton(
                 selected = selected,
