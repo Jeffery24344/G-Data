@@ -60,15 +60,15 @@ fun HomeScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(
-            text = state.mode.displayName,
+            text = if (state.gamingMode) "Gaming Mode 🎮" else state.mode.displayName,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold
         )
         Text(
-            text = state.mode.description,
+            text = state.policySummary,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -77,21 +77,16 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Primary.copy(alpha = 0.12f)
-                )
+                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.12f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Usage Access required", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Usage Access required",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "Grant permission to show real mobile data usage for today and this month.",
+                        "Grant permission to show real mobile data usage.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
                             context.startActivity(
@@ -102,9 +97,7 @@ fun HomeScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Open Usage Access")
-                    }
+                    ) { Text("Open Usage Access") }
                 }
             }
         }
@@ -113,13 +106,10 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
             )
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(Modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 UsageRow("Today", DataFormat.formatBytes(state.todayBytes))
                 UsageRow("This Month", DataFormat.formatBytes(state.monthBytes))
                 HorizontalDivider()
@@ -129,10 +119,13 @@ fun HomeScreen(
                     highlight = true
                 )
                 Text(
-                    if (state.hasUsagePermission)
-                        "Savings are estimates based on optimization being active"
-                    else
-                        "0 until Usage Access is granted",
+                    when {
+                        !state.optimizationEnabled -> "Optimization off — no savings estimated"
+                        state.gamingMode -> "Gaming Mode uses a lower savings estimate"
+                        state.mode == OptimizationMode.EXTREME -> "Extreme mode — highest estimate (~28%)"
+                        state.mode == OptimizationMode.BALANCED -> "Balanced mode estimate (~15%)"
+                        else -> "Performance mode — light estimate (~5%)"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -140,10 +133,7 @@ fun HomeScreen(
         }
 
         if (state.bundle.isValid) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text("Remaining Data", style = MaterialTheme.typography.labelLarge)
                     Text(
@@ -154,7 +144,7 @@ fun HomeScreen(
                     )
                     if (state.bundle.daysLeft > 0) {
                         Text(
-                            "${state.bundle.daysLeft} days left • Recommended ${DataFormat.formatBytes(state.bundle.recommendedDailyBytes)}/day",
+                            "${state.bundle.daysLeft} days left • ${DataFormat.formatBytes(state.bundle.recommendedDailyBytes)}/day",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -163,23 +153,14 @@ fun HomeScreen(
             }
         }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
+        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
+                modifier = Modifier.fillMaxWidth().padding(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text(
-                        "DATA OPTIMIZATION",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text("DATA OPTIMIZATION", fontWeight = FontWeight.Bold)
                     Text(
                         if (state.optimizationEnabled) "Active" else "Paused",
                         style = MaterialTheme.typography.bodySmall,
@@ -196,17 +177,14 @@ fun HomeScreen(
         }
 
         Text("Optimization Mode", style = MaterialTheme.typography.titleMedium)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ModeChip("Performance", state.mode == OptimizationMode.PERFORMANCE, {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ModeChip("Performance", state.mode == OptimizationMode.PERFORMANCE && !state.gamingMode, {
                 viewModel.setMode(OptimizationMode.PERFORMANCE)
             }, Modifier.weight(1f))
-            ModeChip("Balanced", state.mode == OptimizationMode.BALANCED, {
+            ModeChip("Balanced", state.mode == OptimizationMode.BALANCED && !state.gamingMode, {
                 viewModel.setMode(OptimizationMode.BALANCED)
             }, Modifier.weight(1f))
-            ModeChip("Extreme", state.mode == OptimizationMode.EXTREME, {
+            ModeChip("Extreme", state.mode == OptimizationMode.EXTREME && !state.gamingMode, {
                 viewModel.setMode(OptimizationMode.EXTREME)
             }, Modifier.weight(1f))
         }
@@ -215,26 +193,13 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ModeChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        modifier = modifier
-    )
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    FilterChip(selected = selected, onClick = onClick, label = { Text(label) }, modifier = modifier)
 }
 
 @Composable
 private fun UsageRow(label: String, value: String, highlight: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
         Text(
             value,
