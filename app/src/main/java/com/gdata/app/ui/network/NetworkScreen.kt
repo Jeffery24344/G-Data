@@ -27,25 +27,34 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gdata.app.ui.theme.Primary
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 @Composable
-fun NetworkScreen() {
-    var testing by remember { mutableStateOf(false) }
-    var latency by remember { mutableStateOf<Int?>(null) }
-    val scope = rememberCoroutineScope()
+fun NetworkScreen(
+    viewModel: NetworkViewModel = hiltViewModel()
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Column(
         modifier = Modifier
@@ -54,71 +63,149 @@ fun NetworkScreen() {
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Network", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text(
+            text = "Network",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                InfoRow(Icons.Outlined.Wifi, "Connection", "Check in device status bar")
-                InfoRow(Icons.Outlined.SignalCellularAlt, "Type", "Wi-Fi or Mobile")
-                InfoRow(Icons.Outlined.NetworkCheck, "Current Mode", "Balanced")
-                InfoRow(Icons.Outlined.Speed, "Optimization", "On")
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                InfoRow(
+                    icon = if (state.connectionType == "Wi-Fi") Icons.Outlined.Wifi
+                    else Icons.Outlined.SignalCellularAlt,
+                    label = "Connection",
+                    value = state.connectionType
+                )
+                InfoRow(
+                    icon = Icons.Outlined.NetworkCheck,
+                    label = "Operator",
+                    value = state.operatorName
+                )
+                InfoRow(
+                    icon = Icons.Outlined.Speed,
+                    label = "Metered",
+                    value = if (state.isMetered) "Yes (counts toward data)" else "No"
+                )
+                InfoRow(
+                    icon = Icons.Outlined.Speed,
+                    label = "Current Mode",
+                    value = state.modeName
+                )
+                InfoRow(
+                    icon = Icons.Outlined.NetworkCheck,
+                    label = "Optimization",
+                    value = if (state.optimizationEnabled) "On" else "Off"
+                )
             }
         }
 
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
             Column(modifier = Modifier.padding(20.dp)) {
-                Text("Performance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(12.dp))
-                if (latency != null) {
-                    InfoRow(Icons.Outlined.Timer, "Latency (demo)", "$latency ms")
-                } else {
-                    Text("No recent test", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = "Latency test",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                when {
+                    state.latencyMs != null -> {
+                        InfoRow(
+                            icon = Icons.Outlined.Timer,
+                            label = "Latency",
+                            value = "${state.latencyMs} ms"
+                        )
+                    }
+                    state.testError != null -> {
+                        Text(
+                            text = "Test failed: ${state.testError}",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    else -> {
+                        Text(
+                            text = "No recent test",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Spacer(Modifier.height(16.dp))
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 Button(
-                    onClick = {
-                        scope.launch {
-                            testing = true
-                            delay(1200)
-                            latency = (20..80).random()
-                            testing = false
-                        }
-                    },
-                    enabled = !testing,
+                    onClick = { viewModel.runLatencyTest() },
+                    enabled = !state.isTesting,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    if (testing) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
+                    if (state.isTesting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text("Testing…")
                     } else {
                         Text("Run Quick Test")
                     }
                 }
-                Spacer(Modifier.height(8.dp))
+
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Tests run only when you request them. Demo latency for now.",
+                    text = "Measures real connect time to a public server. Only runs when you tap the button (uses almost no data).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        OutlinedButton(onClick = { latency = null }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        OutlinedButton(
+            onClick = { viewModel.refresh() },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
             Text("Refresh Network Info")
         }
     }
 }
 
 @Composable
-private fun InfoRow(icon: ImageVector, label: String, value: String) {
+private fun InfoRow(
+    icon: ImageVector,
+    label: String,
+    value: String
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, tint = Primary, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(12.dp))
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Primary,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
