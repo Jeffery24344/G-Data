@@ -13,8 +13,9 @@
     <application
         android:name=".GDataApp"
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="G Data"
+        android:icon="@drawable/ic_launcher_foreground"
+        android:roundIcon="@drawable/ic_launcher_foreground"
+        android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.GData"
         tools:targetApi="35">
