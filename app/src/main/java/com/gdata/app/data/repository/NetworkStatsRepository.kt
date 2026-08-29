@@ -4,8 +4,7 @@ import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.net.NetworkTemplate
-import android.os.Build
+import android.net.ConnectivityManager
 import com.gdata.app.util.UsageAccessHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -54,15 +53,6 @@ class NetworkStatsRepository @Inject constructor(
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
 
-    private fun mobileTemplate(): NetworkTemplate {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            NetworkTemplate.Builder(NetworkTemplate.MATCH_MOBILE).build()
-        } else {
-            @Suppress("DEPRECATION")
-            NetworkTemplate.buildTemplateMobileWildcard()
-        }
-    }
-
     suspend fun getTodayMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
         queryPeriod(startOfToday(), System.currentTimeMillis())
     }
@@ -78,7 +68,13 @@ class NetworkStatsRepository @Inject constructor(
             val end = System.currentTimeMillis()
             val uidMap = mutableMapOf<Int, Long>()
             try {
-                val stats = networkStatsManager.querySummary(mobileTemplate(), start, end)
+                @Suppress("DEPRECATION")
+                val stats = networkStatsManager.querySummary(
+                    ConnectivityManager.TYPE_MOBILE,
+                    null,
+                    start,
+                    end
+                )
                 val bucket = NetworkStats.Bucket()
                 while (stats.hasNextBucket()) {
                     stats.getNextBucket(bucket)
@@ -98,7 +94,8 @@ class NetworkStatsRepository @Inject constructor(
 
             val total = uidMap.values.sum().coerceAtLeast(1L)
             uidMap.mapNotNull { (uid, bytes) ->
-                val pkg = packageManager.getPackagesForUid(uid)?.firstOrNull() ?: return@mapNotNull null
+                val pkg = packageManager.getPackagesForUid(uid)?.firstOrNull()
+                    ?: return@mapNotNull null
                 val label = try {
                     val ai = packageManager.getApplicationInfo(pkg, 0)
                     packageManager.getApplicationLabel(ai).toString()
@@ -119,7 +116,13 @@ class NetworkStatsRepository @Inject constructor(
         var rx = 0L
         var tx = 0L
         try {
-            val stats = networkStatsManager.querySummary(mobileTemplate(), start, end)
+            @Suppress("DEPRECATION")
+            val stats = networkStatsManager.querySummary(
+                ConnectivityManager.TYPE_MOBILE,
+                null,
+                start,
+                end
+            )
             val bucket = NetworkStats.Bucket()
             while (stats.hasNextBucket()) {
                 stats.getNextBucket(bucket)
