@@ -13,8 +13,8 @@
     <application
         android:name=".GDataApp"
         android:allowBackup="true"
-        android:icon="@drawable/ic_launcher_foreground"
-        android:roundIcon="@drawable/ic_launcher_foreground"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.GData"

@@ -13,14 +13,14 @@ private val DarkColorScheme = darkColorScheme(
     surface = SurfaceDark,
     onSurface = Color(0xFFE8EAED),
     surfaceVariant = CardDark,
-    background = Color(0xFF0A0B0D)
+    background = Color(0xFF060D18)
 )
 
 private val LightColorScheme = lightColorScheme(
     primary = Primary,
     onPrimary = Color.White,
     surface = Color.White,
-    background = Color(0xFFF7F9FC)
+    background = Color(0xFFF0F7FC)
 )
 
 @Composable
