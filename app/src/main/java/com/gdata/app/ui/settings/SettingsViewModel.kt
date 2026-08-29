@@ -39,7 +39,7 @@ class SettingsViewModel @Inject constructor(
     fun testNotification() {
         notificationHelper.notifyUsage(
             "G Data",
-            "Notifications are working. You\'ll get alerts for high usage and bundle expiry."
+            "Notifications are working. You will get alerts for high usage and bundle expiry."
         )
     }
 }
