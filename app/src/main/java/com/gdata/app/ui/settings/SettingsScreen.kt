@@ -19,13 +19,13 @@ import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material.icons.outlined.Rule
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -42,19 +42,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gdata.app.ui.theme.Primary
 import com.gdata.app.util.DataFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onPrivacy: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel()
+) {
+    val bundle by viewModel.bundle.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf(false) }
-    var totalGb by remember { mutableStateOf("20") }
-    var remainingGb by remember { mutableStateOf("5.6") }
-    var daysLeft by remember { mutableStateOf("12") }
-    var savedTotal by remember { mutableStateOf(20_000_000_000L) }
-    var savedRemaining by remember { mutableStateOf(5_600_000_000L) }
-    var savedDays by remember { mutableStateOf(12) }
+    var totalGb by remember { mutableStateOf("") }
+    var remainingGb by remember { mutableStateOf("") }
+    var daysLeft by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -88,76 +92,109 @@ fun SettingsScreen(onBack: () -> Unit) {
                             Spacer(Modifier.width(12.dp))
                             Text("Data Bundle", fontWeight = FontWeight.SemiBold)
                         }
-                        if (!editing) TextButton(onClick = { editing = true }) { Text("Edit") }
+                        if (!editing) {
+                            TextButton(onClick = {
+                                totalGb = if (bundle.totalBytes > 0)
+                                    (bundle.totalBytes / 1_000_000_000.0).toString() else ""
+                                remainingGb = if (bundle.remainingBytes > 0)
+                                    (bundle.remainingBytes / 1_000_000_000.0).toString() else ""
+                                daysLeft = if (bundle.daysLeft > 0) bundle.daysLeft.toString() else ""
+                                editing = true
+                            }) { Text("Edit") }
+                        }
                     }
                     Spacer(Modifier.height(16.dp))
                     if (editing) {
-                        OutlinedTextField(totalGb, { totalGb = it }, label = { Text("Total (GB)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(
+                            totalGb, { totalGb = it },
+                            label = { Text("Total (GB)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(remainingGb, { remainingGb = it }, label = { Text("Remaining (GB)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(
+                            remainingGb, { remainingGb = it },
+                            label = { Text("Remaining (GB)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(daysLeft, { daysLeft = it }, label = { Text("Days left") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(
+                            daysLeft, { daysLeft = it },
+                            label = { Text("Days left") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                         Spacer(Modifier.height(16.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { editing = false }) { Text("Cancel") }
                             Spacer(Modifier.width(8.dp))
                             Button(onClick = {
-                                savedTotal = ((totalGb.toDoubleOrNull() ?: 0.0) * 1_000_000_000L).toLong()
-                                savedRemaining = ((remainingGb.toDoubleOrNull() ?: 0.0) * 1_000_000_000L).toLong()
-                                savedDays = daysLeft.toIntOrNull() ?: 0
+                                viewModel.saveBundle(totalGb, remainingGb, daysLeft)
                                 editing = false
                             }) { Text("Save") }
                         }
-                    } else {
+                    } else if (bundle.isValid) {
                         Text("Remaining", style = MaterialTheme.typography.bodySmall)
-                        Text(DataFormat.formatBytes(savedRemaining), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Primary)
-                        Text("Total: ${DataFormat.formatBytes(savedTotal)}")
-                        if (savedDays > 0) {
-                            val daily = savedRemaining / savedDays
-                            Text("$savedDays days left • Recommended ${DataFormat.formatBytes(daily)}/day",
+                        Text(
+                            DataFormat.formatBytes(bundle.remainingBytes),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Primary
+                        )
+                        Text("Total: ${DataFormat.formatBytes(bundle.totalBytes)}")
+                        if (bundle.daysLeft > 0) {
+                            Text(
+                                "${bundle.daysLeft} days left • Recommended ${DataFormat.formatBytes(bundle.recommendedDailyBytes)}/day",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium
                             )
+                        }
+                    } else {
+                        Text(
+                            "No bundle saved yet. Tap Edit to enter your package.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                Column {
+                    Surface(onClick = onPrivacy, modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.PrivacyTip, null, tint = Primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text("Privacy", fontWeight = FontWeight.Medium)
+                                Text("What we monitor and what we don\'t", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    Surface(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+                        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.Info, null, tint = Primary)
+                            Spacer(Modifier.width(16.dp))
+                            Column {
+                                Text("About G Data", fontWeight = FontWeight.Medium)
+                                Text("Version 1.0.0 • Big Big Dream", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }
             }
 
-            SettingsGroup("Preferences") {
-                SettingsItem(Icons.Outlined.Notifications, "Notifications & Alerts", "Daily limits, high usage warnings")
-                SettingsItem(Icons.Outlined.Rule, "Optimization Rules", "Automatic mode switching")
-                SettingsItem(Icons.Outlined.PrivacyTip, "Privacy", "What we monitor and what we don’t")
-            }
-            SettingsGroup("About") {
-                SettingsItem(Icons.Outlined.Info, "About G Data", "Version 1.0.0 • Big Big Dream")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsGroup(title: String, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Column {
-        Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
-        Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-            Column(content = content)
-        }
-    }
-}
-
-@Composable
-private fun SettingsItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    subtitle: String
-) {
-    Surface(onClick = { }, modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = Primary)
-            Spacer(Modifier.width(16.dp))
-            Column {
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(
+                onClick = { viewModel.testNotification() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Outlined.Notifications, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Send test notification")
             }
         }
     }

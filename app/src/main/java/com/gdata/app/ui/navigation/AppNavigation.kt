@@ -13,6 +13,7 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.NetworkCheck
 import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,7 +24,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -39,6 +39,7 @@ import com.gdata.app.ui.apps.AppsScreen
 import com.gdata.app.ui.datasaver.DataSaverScreen
 import com.gdata.app.ui.home.HomeScreen
 import com.gdata.app.ui.network.NetworkScreen
+import com.gdata.app.ui.privacy.PrivacyScreen
 import com.gdata.app.ui.settings.SettingsScreen
 import com.gdata.app.ui.statistics.StatisticsScreen
 import com.gdata.app.ui.theme.Primary
@@ -63,11 +64,12 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
-    val showBottomBar = currentDestination?.route != Screen.Settings.route
+    val hideChrome = currentDestination?.route == Screen.Settings.route ||
+        currentDestination?.route == Screen.Privacy.route
 
     Scaffold(
         topBar = {
-            if (currentDestination?.route != Screen.Settings.route) {
+            if (!hideChrome) {
                 TopAppBar(
                     title = {
                         val title = bottomNavItems
@@ -87,7 +89,7 @@ fun AppNavigation() {
             }
         },
         bottomBar = {
-            if (showBottomBar) {
+            if (!hideChrome) {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
                         val selected = currentDestination?.hierarchy?.any {
@@ -110,7 +112,9 @@ fun AppNavigation() {
                                     contentDescription = item.screen.title
                                 )
                             },
-                            label = { Text(item.screen.title, style = MaterialTheme.typography.labelSmall) },
+                            label = {
+                                Text(item.screen.title, style = MaterialTheme.typography.labelSmall)
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Primary,
                                 selectedTextColor = Primary,
@@ -133,7 +137,13 @@ fun AppNavigation() {
             composable(Screen.Statistics.route) { StatisticsScreen() }
             composable(Screen.Network.route) { NetworkScreen() }
             composable(Screen.Settings.route) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onPrivacy = { navController.navigate(Screen.Privacy.route) }
+                )
+            }
+            composable(Screen.Privacy.route) {
+                PrivacyScreen(onBack = { navController.popBackStack() })
             }
         }
     }
