@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-import base64, pathlib, subprocess
+"""Decode brand icon and generate launcher PNGs with proper square padding (no gray bars)."""
+import base64
+import pathlib
+import subprocess
 
-# Remove any XML launcher stubs that would conflict with PNG resources
 for xml in pathlib.Path("app/src/main/res").rglob("ic_launcher.xml"):
     xml.unlink()
     print("Removed", xml)
 
 b64 = pathlib.Path("scripts/icon.jpg.b64").read_text().strip()
 raw = base64.b64decode(b64)
-src_jpg = pathlib.Path("app/src/main/res/mipmap-xxxhdpi/ic_launcher_src.jpg")
-src_jpg.parent.mkdir(parents=True, exist_ok=True)
-src_jpg.write_bytes(raw)
-print("Wrote source jpg", len(raw))
+src = pathlib.Path("/tmp/gdata_icon_src.jpg")
+src.write_bytes(raw)
+print("Source bytes", len(raw))
 
+# Full-bleed square on brand dark blue so launcher is not squished / letterboxed gray
+bg = "#0A1628"
 for folder, px in [
     ("mipmap-mdpi", 48),
     ("mipmap-hdpi", 72),
@@ -22,14 +25,18 @@ for folder, px in [
 ]:
     out = pathlib.Path(f"app/src/main/res/{folder}/ic_launcher.png")
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Remove conflicting xml in same folder if any
     conflict = out.with_suffix(".xml")
     if conflict.exists():
         conflict.unlink()
+    # Resize to fit, center on square canvas of brand color (no gray bars)
     subprocess.check_call([
-        "convert", str(src_jpg), "-resize", f"{px}x{px}", str(out)
+        "convert", str(src),
+        "-resize", f"{px}x{px}^",
+        "-gravity", "center",
+        "-background", bg,
+        "-extent", f"{px}x{px}",
+        str(out),
     ])
     print("Wrote", out)
 
-src_jpg.unlink(missing_ok=True)
 print("Done")
