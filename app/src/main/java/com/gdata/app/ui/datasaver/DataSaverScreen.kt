@@ -211,14 +211,14 @@ fun DataSaverScreen(
         ) {
             Button(
                 onClick = {
+                    val dataSaverIntent = Intent("android.settings.DATA_SAVER_SETTINGS")
+                    dataSaverIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     try {
-                        val intent = Intent(Settings.ACTION_DATA_SAVER_SETTINGS)
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
+                        context.startActivity(dataSaverIntent)
                     } catch (_: Exception) {
-                        val fallback = Intent(Settings.ACTION_WIRELESS_SETTINGS)
-                        fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(fallback)
+                        val wireless = Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                        wireless.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        context.startActivity(wireless)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
