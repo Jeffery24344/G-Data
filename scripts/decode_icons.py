@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import base64, pathlib, subprocess
-b64 = pathlib.Path("scripts/icon.b64").read_text().strip()
+parts = sorted(pathlib.Path("scripts/icon_parts").glob("part*.txt"))
+b64 = "".join(p.read_text().strip() for p in parts)
 raw = base64.b64decode(b64)
 src = pathlib.Path("app/src/main/res/mipmap-xxxhdpi/ic_launcher.png")
 src.parent.mkdir(parents=True, exist_ok=True)
