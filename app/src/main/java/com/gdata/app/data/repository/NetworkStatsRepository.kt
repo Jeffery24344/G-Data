@@ -26,6 +26,12 @@ data class AppUsageRow(
     val percentage: Float
 )
 
+data class DayUsageRow(
+    val dayLabel: String,
+    val dayStart: Long,
+    val bytes: Long
+)
+
 @Singleton
 class NetworkStatsRepository @Inject constructor(
     @ApplicationContext private val context: Context
@@ -53,63 +59,102 @@ class NetworkStatsRepository @Inject constructor(
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
 
+    private fun startOfWeek(): Long =
+        Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.MONDAY
+            set(Calendar.DAY_OF_WEEK, Calendar.MONDAY)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            if (timeInMillis > System.currentTimeMillis()) {
+                add(Calendar.WEEK_OF_YEAR, -1)
+            }
+        }.timeInMillis
+
     suspend fun getTodayMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
         queryPeriod(startOfToday(), System.currentTimeMillis())
+    }
+
+    suspend fun getWeekMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
+        queryPeriod(startOfWeek(), System.currentTimeMillis())
     }
 
     suspend fun getMonthMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
         queryPeriod(startOfMonth(), System.currentTimeMillis())
     }
 
-    suspend fun getTopAppsThisMonth(limit: Int = 20): List<AppUsageRow> =
-        withContext(Dispatchers.IO) {
-            if (!hasPermission()) return@withContext emptyList()
-            val start = startOfMonth()
-            val end = System.currentTimeMillis()
-            val uidMap = mutableMapOf<Int, Long>()
-            try {
-                @Suppress("DEPRECATION")
-                val stats = networkStatsManager.querySummary(
-                    ConnectivityManager.TYPE_MOBILE,
-                    null,
-                    start,
-                    end
-                )
-                val bucket = NetworkStats.Bucket()
-                while (stats.hasNextBucket()) {
-                    stats.getNextBucket(bucket)
-                    val uid = bucket.uid
-                    if (uid == NetworkStats.Bucket.UID_ALL ||
-                        uid == NetworkStats.Bucket.UID_REMOVED ||
-                        uid == NetworkStats.Bucket.UID_TETHERING
-                    ) continue
-                    uidMap[uid] = (uidMap[uid] ?: 0L) + bucket.rxBytes + bucket.txBytes
-                }
-                stats.close()
-            } catch (_: SecurityException) {
-                return@withContext emptyList()
-            } catch (_: Exception) {
-                return@withContext emptyList()
+    suspend fun getLast7DaysBreakdown(): List<DayUsageRow> = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext emptyList()
+        val result = mutableListOf<DayUsageRow>()
+        for (i in 6 downTo 0) {
+            val dayEnd = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, -i)
+                set(Calendar.HOUR_OF_DAY, 23)
+                set(Calendar.MINUTE, 59)
+                set(Calendar.SECOND, 59)
+                set(Calendar.MILLISECOND, 999)
             }
-
-            val total = uidMap.values.sum().coerceAtLeast(1L)
-            uidMap.mapNotNull { (uid, bytes) ->
-                val pkg = packageManager.getPackagesForUid(uid)?.firstOrNull()
-                    ?: return@mapNotNull null
-                val label = try {
-                    val ai = packageManager.getApplicationInfo(pkg, 0)
-                    packageManager.getApplicationLabel(ai).toString()
-                } catch (_: PackageManager.NameNotFoundException) {
-                    pkg
-                }
-                AppUsageRow(
-                    packageName = pkg,
-                    appName = label,
-                    totalBytes = bytes,
-                    percentage = (bytes.toFloat() / total) * 100f
-                )
-            }.sortedByDescending { it.totalBytes }.take(limit)
+            val dayStart = Calendar.getInstance().apply {
+                timeInMillis = dayEnd.timeInMillis
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val endMs = if (i == 0) System.currentTimeMillis() else dayEnd.timeInMillis
+            val usage = queryPeriod(dayStart.timeInMillis, endMs)
+            val label = android.text.format.DateFormat.format("EEE", dayStart).toString()
+            result.add(DayUsageRow(label, dayStart.timeInMillis, usage.totalBytes))
         }
+        result
+    }
+
+    suspend fun getTopApps(
+        start: Long,
+        end: Long,
+        limit: Int = 10
+    ): List<AppUsageRow> = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext emptyList()
+        val uidMap = mutableMapOf<Int, Long>()
+        try {
+            @Suppress("DEPRECATION")
+            val stats = networkStatsManager.querySummary(
+                ConnectivityManager.TYPE_MOBILE,
+                null,
+                start,
+                end
+            )
+            val bucket = NetworkStats.Bucket()
+            while (stats.hasNextBucket()) {
+                stats.getNextBucket(bucket)
+                val uid = bucket.uid
+                if (uid == NetworkStats.Bucket.UID_ALL ||
+                    uid == NetworkStats.Bucket.UID_REMOVED ||
+                    uid == NetworkStats.Bucket.UID_TETHERING
+                ) continue
+                uidMap[uid] = (uidMap[uid] ?: 0L) + bucket.rxBytes + bucket.txBytes
+            }
+            stats.close()
+        } catch (_: Exception) {
+            return@withContext emptyList()
+        }
+
+        val total = uidMap.values.sum().coerceAtLeast(1L)
+        uidMap.mapNotNull { (uid, bytes) ->
+            val pkg = packageManager.getPackagesForUid(uid)?.firstOrNull() ?: return@mapNotNull null
+            val label = try {
+                val ai = packageManager.getApplicationInfo(pkg, 0)
+                packageManager.getApplicationLabel(ai).toString()
+            } catch (_: PackageManager.NameNotFoundException) {
+                pkg
+            }
+            AppUsageRow(pkg, label, bytes, (bytes.toFloat() / total) * 100f)
+        }.sortedByDescending { it.totalBytes }.take(limit)
+    }
+
+    suspend fun getTopAppsThisMonth(limit: Int = 20): List<AppUsageRow> =
+        getTopApps(startOfMonth(), System.currentTimeMillis(), limit)
 
     private fun queryPeriod(start: Long, end: Long): PeriodUsage {
         if (!hasPermission()) return PeriodUsage(0, start, end)
@@ -135,4 +180,8 @@ class NetworkStatsRepository @Inject constructor(
         }
         return PeriodUsage(rx + tx, start, end)
     }
+
+    fun startOfTodayMs(): Long = startOfToday()
+    fun startOfWeekMs(): Long = startOfWeek()
+    fun startOfMonthMs(): Long = startOfMonth()
 }
