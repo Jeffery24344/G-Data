@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -36,7 +37,6 @@ fun HomeScreen() {
     var optimizationOn by remember { mutableStateOf(true) }
     var mode by remember { mutableStateOf(OptimizationMode.BALANCED) }
 
-    // Demo numbers until Usage Access + real stats are wired
     val todayBytes = 1_240_000_000L
     val monthBytes = 18_700_000_000L
     val savedBytes = 680_000_000L
@@ -67,11 +67,18 @@ fun HomeScreen() {
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
             )
         ) {
-            Column(Modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                UsageRow("Today", DataFormat.formatBytes(todayBytes))
-                UsageRow("This Month", DataFormat.formatBytes(monthBytes))
-                androidx.compose.material3.HorizontalDivider()
-                UsageRow("Estimated Savings", DataFormat.formatBytes(savedBytes), highlight = true)
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                UsageRow(label = "Today", value = DataFormat.formatBytes(todayBytes))
+                UsageRow(label = "This Month", value = DataFormat.formatBytes(monthBytes))
+                HorizontalDivider()
+                UsageRow(
+                    label = "Estimated Savings",
+                    value = DataFormat.formatBytes(savedBytes),
+                    highlight = true
+                )
                 Text(
                     text = "Estimates only • real stats after Usage Access",
                     style = MaterialTheme.typography.labelMedium,
@@ -84,8 +91,11 @@ fun HomeScreen() {
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Column(Modifier = Modifier.padding(20.dp)) {
-                Text("Remaining Data", style = MaterialTheme.typography.labelLarge)
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    text = "Remaining Data",
+                    style = MaterialTheme.typography.labelLarge
+                )
                 Text(
                     text = DataFormat.formatBytes(remainingBytes),
                     style = MaterialTheme.typography.headlineMedium,
@@ -112,11 +122,16 @@ fun HomeScreen() {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("DATA OPTIMIZATION", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        if (optimizationOn) "Active" else "Paused",
+                        text = "DATA OPTIMIZATION",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (optimizationOn) "Active" else "Paused",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (optimizationOn) Primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (optimizationOn) Primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
@@ -127,27 +142,33 @@ fun HomeScreen() {
             }
         }
 
-        Text("Optimization Mode", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "Optimization Mode",
+            style = MaterialTheme.typography.titleMedium
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OptimizationMode.entries.forEach { m ->
-                FilterChip(
-                    selected = mode == m,
-                    onClick = { mode = m },
-                    label = {
-                        Text(
-                            when (m) {
-                                OptimizationMode.PERFORMANCE -> "Performance"
-                                OptimizationMode.BALANCED -> "Balanced"
-                                OptimizationMode.EXTREME -> "Extreme"
-                            }
-                        )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            ModeChip(
+                label = "Performance",
+                selected = mode == OptimizationMode.PERFORMANCE,
+                onClick = { mode = OptimizationMode.PERFORMANCE },
+                modifier = Modifier.weight(1f)
+            )
+            ModeChip(
+                label = "Balanced",
+                selected = mode == OptimizationMode.BALANCED,
+                onClick = { mode = OptimizationMode.BALANCED },
+                modifier = Modifier.weight(1f)
+            )
+            ModeChip(
+                label = "Extreme",
+                selected = mode == OptimizationMode.EXTREME,
+                onClick = { mode = OptimizationMode.EXTREME },
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -155,14 +176,36 @@ fun HomeScreen() {
 }
 
 @Composable
-private fun UsageRow(label: String, value: String, highlight: Boolean = false) {
+private fun ModeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text = label) },
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun UsageRow(
+    label: String,
+    value: String,
+    highlight: Boolean = false
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge)
         Text(
-            value,
+            text = label,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            text = value,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = if (highlight) Primary else MaterialTheme.colorScheme.onSurface
