@@ -84,7 +84,7 @@ fun HomeScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(text = "Usage Access required", fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = "Grant permission to show real mobile data usage.",
+                        text = "Without this, Home and Apps cannot read real usage.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -115,24 +115,23 @@ fun HomeScreen(
                 modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                UsageRow(label = "Today", value = DataFormat.formatBytes(state.todayBytes))
-                UsageRow(label = "This Month", value = DataFormat.formatBytes(state.monthBytes))
+                UsageRow(label = "Today (mobile)", value = DataFormat.formatBytes(state.todayBytes))
+                UsageRow(label = "This month (mobile)", value = DataFormat.formatBytes(state.monthBytes))
                 HorizontalDivider()
                 UsageRow(
-                    label = "Estimated Savings",
+                    label = "Estimated savings",
                     value = DataFormat.formatBytes(state.estimatedSavedBytes),
                     highlight = true
                 )
-                val estimateNote = when {
-                    !state.optimizationEnabled -> "Optimization off — no savings estimated"
-                    state.gamingMode -> "Gaming Mode uses a lower savings estimate"
-                    state.mode == OptimizationMode.EXTREME -> "Extreme mode — highest estimate (~28%)"
-                    state.mode == OptimizationMode.BALANCED -> "Balanced mode estimate (~15%)"
-                    else -> "Performance mode — light estimate (~5%)"
-                }
                 Text(
-                    text = estimateNote,
+                    text = state.dataSourceNote,
                     style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Estimated savings is NOT measured cut data. " +
+                        "It is a mode-based estimate only. Real cuts need system Data Saver + less usage.",
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -178,11 +177,8 @@ fun HomeScreen(
                     Text(
                         text = if (state.optimizationEnabled) "Active" else "Paused",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (state.optimizationEnabled) {
-                            Primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                        color = if (state.optimizationEnabled) Primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
