@@ -1,6 +1,8 @@
 package com.gdata.app.ui.network
 
+import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.telephony.TelephonyManager
@@ -8,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gdata.app.domain.manager.ModeManager
 import com.gdata.app.domain.model.OptimizationMode
+import com.gdata.app.vpn.VpnController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -29,13 +32,15 @@ data class NetworkUiState(
     val optimizationEnabled: Boolean = true,
     val latencyMs: Int? = null,
     val isTesting: Boolean = false,
-    val testError: String? = null
+    val testError: String? = null,
+    val vpnRunning: Boolean = false
 )
 
 @HiltViewModel
 class NetworkViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val modeManager: ModeManager
+    private val modeManager: ModeManager,
+    private val vpnController: VpnController
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NetworkUiState())
@@ -58,7 +63,6 @@ class NetworkViewModel @Inject constructor(
     fun refresh() {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-
         val network = cm.activeNetwork
         val caps = network?.let { cm.getNetworkCapabilities(it) }
 
@@ -87,17 +91,28 @@ class NetworkViewModel @Inject constructor(
                 connectionType = type,
                 operatorName = operator,
                 isMetered = metered,
-                testError = null
+                testError = null,
+                vpnRunning = vpnController.isRunning()
             )
         }
+    }
+
+    fun prepareVpn(activity: Activity): Intent? = vpnController.prepareIntent(activity)
+
+    fun startVpn() {
+        vpnController.start()
+        _uiState.update { it.copy(vpnRunning = true) }
+    }
+
+    fun stopVpn() {
+        vpnController.stop()
+        _uiState.update { it.copy(vpnRunning = false) }
     }
 
     fun runLatencyTest() {
         viewModelScope.launch {
             _uiState.update { it.copy(isTesting = true, testError = null) }
-            val result = withContext(Dispatchers.IO) {
-                measureLatencyMs()
-            }
+            val result = withContext(Dispatchers.IO) { measureLatencyMs() }
             _uiState.update {
                 it.copy(
                     isTesting = false,
@@ -108,16 +123,8 @@ class NetworkViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Real TCP connect time to a public DNS host (not a random demo number).
-     * Uses port 53 / 443 with short timeout. Does not run continuously.
-     */
     private fun measureLatencyMs(): Result<Int> {
-        val hosts = listOf(
-            "1.1.1.1" to 443,
-            "8.8.8.8" to 443,
-            "dns.google" to 443
-        )
+        val hosts = listOf("1.1.1.1" to 443, "8.8.8.8" to 443)
         var lastError: Exception? = null
         for ((host, port) in hosts) {
             try {
