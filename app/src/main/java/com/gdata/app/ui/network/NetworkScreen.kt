@@ -112,7 +112,7 @@ fun NetworkScreen(
                         Column {
                             Text("Local VPN", fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (state.vpnRunning) "Connected (system VPN)" else "Off",
+                                if (state.vpnRunning) "On (safe mode)" else "Off",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (state.vpnRunning) Primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -141,11 +141,10 @@ fun NetworkScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Real Android VpnService on your device. " +
-                        "Legal for your own phone. No decryption, no free carrier data, " +
-                        "no traffic uploaded to Big Big Dream. " +
-                        "When on, you should see the key icon in the status bar and " +
-                        "Settings → Network → VPN listing G Data.",
+                    "Safe mode: real Android VPN session without capturing all traffic or DNS. " +
+                        "Your other apps should keep loading. " +
+                        "If anything still fails, turn VPN OFF here or in Settings → Network → VPN. " +
+                        "Full traffic-capture VPN needs a complete network stack and is not enabled yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -164,7 +163,7 @@ fun NetworkScreen(
                     else ->
                         Text("No recent test", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.runLatencyTest() },
                     enabled = !state.isTesting,

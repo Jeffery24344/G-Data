@@ -11,28 +11,22 @@ import android.os.ParcelFileDescriptor
 import androidx.core.app.NotificationCompat
 import com.gdata.app.MainActivity
 import com.gdata.app.R
-import java.io.FileInputStream
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Local VPN session that stays connected WITHOUT hijacking all app traffic.
+ * Minimal local VPN session.
  *
- * Why: a full userspace TCP stack is required to route 0.0.0.0/0 safely.
- * Routing everything without a complete return path breaks other apps.
+ * Critical design choice: do NOT add DNS servers and do NOT add public routes.
+ * Adding DNS or 0.0.0.0/0 without a complete userspace stack breaks Chrome,
+ * WhatsApp, and other apps (no working return path).
  *
- * This service:
- * - Uses real Android VpnService (status bar key, Settings → VPN)
- * - Does NOT decrypt traffic
- * - Does NOT send traffic to servers
- * - Does NOT capture the default route, so Chrome/WhatsApp/etc keep working
- *
- * Future: optional advanced capture mode can be added behind a clear warning.
+ * This still uses real VpnService so Android can show the VPN key, while
+ * leaving normal app networking on the device's default network.
  */
 class GDataVpnService : VpnService() {
 
     private var tunInterface: ParcelFileDescriptor? = null
     private val running = AtomicBoolean(false)
-    private var readerThread: Thread? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -53,22 +47,30 @@ class GDataVpnService : VpnService() {
 
         try {
             val builder = Builder()
-                .setSession("G Data Local VPN")
+                .setSession("G Data")
                 .setMtu(1500)
-                .addAddress("10.10.10.2", 32)
-                // Local subnet only — do NOT addRoute(0.0.0.0, 0)
-                // so other apps keep normal internet access.
-                .addRoute("10.10.10.0", 24)
-                .addDnsServer("1.1.1.1")
+                // Link-local style address only
+                .addAddress("10.255.255.2", 32)
+
+            // Intentionally NO addDnsServer(...) — DNS hijack was killing apps.
+            // Intentionally NO addRoute("0.0.0.0", 0) — full capture needs a real stack.
+            // Optional tiny private route only (never public internet ranges).
+            builder.addRoute("10.255.255.0", 24)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 builder.setMetered(false)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                builder.allowFamily(android.system.OsConstants.AF_INET)
             }
 
             try {
                 builder.addDisallowedApplication(packageName)
             } catch (_: Exception) {
             }
+
+            // Prefer non-blocking so we never stall the system network path
+            builder.setBlocking(false)
 
             tunInterface = builder.establish()
             if (tunInterface == null) {
@@ -78,19 +80,6 @@ class GDataVpnService : VpnService() {
 
             running.set(true)
             isRunning = true
-
-            // Drain any packets on the local interface so the FD stays healthy
-            readerThread = Thread({
-                val input = FileInputStream(tunInterface!!.fileDescriptor)
-                val buffer = ByteArray(32767)
-                try {
-                    while (running.get()) {
-                        val n = input.read(buffer)
-                        if (n <= 0) Thread.sleep(100)
-                    }
-                } catch (_: Exception) {
-                }
-            }, "GDataVpnReader").also { it.start() }
         } catch (_: Exception) {
             stopVpn()
             stopSelf()
@@ -101,8 +90,6 @@ class GDataVpnService : VpnService() {
         running.set(false)
         isRunning = false
         try {
-            readerThread?.interrupt()
-            readerThread = null
             tunInterface?.close()
         } catch (_: Exception) {
         }
@@ -140,7 +127,7 @@ class GDataVpnService : VpnService() {
         )
         return NotificationCompat.Builder(this, channelId)
             .setContentTitle("G Data VPN on")
-            .setContentText("Connected · apps keep normal internet · no decryption")
+            .setContentText("Session active · normal apps use system network · no decryption")
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pending)
             .setOngoing(true)
