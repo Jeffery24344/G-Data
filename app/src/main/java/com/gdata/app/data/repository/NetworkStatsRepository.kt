@@ -5,6 +5,8 @@ import android.app.usage.NetworkStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
+import android.os.Build
+import android.telephony.TelephonyManager
 import com.gdata.app.util.UsageAccessHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +17,8 @@ import javax.inject.Singleton
 
 data class PeriodUsage(
     val totalBytes: Long,
+    val mobileBytes: Long,
+    val wifiBytes: Long,
     val startTime: Long,
     val endTime: Long
 )
@@ -72,6 +76,58 @@ class NetworkStatsRepository @Inject constructor(
             }
         }.timeInMillis
 
+    /** Subscriber IDs to try — some devices need a non-null value. */
+    private fun subscriberIds(): List<String?> {
+        val ids = mutableListOf<String?>(null, "")
+        try {
+            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+            val sid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                null // restricted without privileged permission
+            } else {
+                @Suppress("DEPRECATION")
+                tm?.subscriberId
+            }
+            if (!sid.isNullOrBlank()) ids.add(0, sid)
+        } catch (_: Exception) {
+            // ignore
+        }
+        return ids.distinct()
+    }
+
+    private fun queryNetworkType(networkType: Int, start: Long, end: Long): Long {
+        var total = 0L
+        for (subscriber in subscriberIds()) {
+            try {
+                @Suppress("DEPRECATION")
+                val stats = networkStatsManager.querySummary(networkType, subscriber, start, end)
+                val bucket = NetworkStats.Bucket()
+                var sum = 0L
+                while (stats.hasNextBucket()) {
+                    stats.getNextBucket(bucket)
+                    sum += bucket.rxBytes + bucket.txBytes
+                }
+                stats.close()
+                if (sum > total) total = sum
+            } catch (_: Exception) {
+                // try next subscriber
+            }
+        }
+        return total
+    }
+
+    private fun queryPeriod(start: Long, end: Long): PeriodUsage {
+        if (!hasPermission()) return PeriodUsage(0, 0, 0, start, end)
+        val mobile = queryNetworkType(ConnectivityManager.TYPE_MOBILE, start, end)
+        val wifi = queryNetworkType(ConnectivityManager.TYPE_WIFI, start, end)
+        return PeriodUsage(
+            totalBytes = mobile, // primary metric for data-saver app is mobile
+            mobileBytes = mobile,
+            wifiBytes = wifi,
+            startTime = start,
+            endTime = end
+        )
+    }
+
     suspend fun getTodayMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
         queryPeriod(startOfToday(), System.currentTimeMillis())
     }
@@ -105,7 +161,7 @@ class NetworkStatsRepository @Inject constructor(
             val endMs = if (i == 0) System.currentTimeMillis() else dayEnd.timeInMillis
             val usage = queryPeriod(dayStart.timeInMillis, endMs)
             val label = android.text.format.DateFormat.format("EEE", dayStart).toString()
-            result.add(DayUsageRow(label, dayStart.timeInMillis, usage.totalBytes))
+            result.add(DayUsageRow(label, dayStart.timeInMillis, usage.mobileBytes))
         }
         result
     }
@@ -113,36 +169,45 @@ class NetworkStatsRepository @Inject constructor(
     suspend fun getTopApps(
         start: Long,
         end: Long,
-        limit: Int = 10
+        limit: Int = 30,
+        mobileOnly: Boolean = true
     ): List<AppUsageRow> = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext emptyList()
         val uidMap = mutableMapOf<Int, Long>()
-        try {
-            @Suppress("DEPRECATION")
-            val stats = networkStatsManager.querySummary(
-                ConnectivityManager.TYPE_MOBILE,
-                null,
-                start,
-                end
-            )
-            val bucket = NetworkStats.Bucket()
-            while (stats.hasNextBucket()) {
-                stats.getNextBucket(bucket)
-                val uid = bucket.uid
-                if (uid == NetworkStats.Bucket.UID_ALL ||
-                    uid == NetworkStats.Bucket.UID_REMOVED ||
-                    uid == NetworkStats.Bucket.UID_TETHERING
-                ) continue
-                uidMap[uid] = (uidMap[uid] ?: 0L) + bucket.rxBytes + bucket.txBytes
+        val types = if (mobileOnly) {
+            listOf(ConnectivityManager.TYPE_MOBILE)
+        } else {
+            listOf(ConnectivityManager.TYPE_MOBILE, ConnectivityManager.TYPE_WIFI)
+        }
+        for (type in types) {
+            for (subscriber in subscriberIds()) {
+                try {
+                    @Suppress("DEPRECATION")
+                    val stats = networkStatsManager.querySummary(type, subscriber, start, end)
+                    val bucket = NetworkStats.Bucket()
+                    while (stats.hasNextBucket()) {
+                        stats.getNextBucket(bucket)
+                        val uid = bucket.uid
+                        if (uid == NetworkStats.Bucket.UID_ALL ||
+                            uid == NetworkStats.Bucket.UID_REMOVED ||
+                            uid == NetworkStats.Bucket.UID_TETHERING
+                        ) continue
+                        val bytes = bucket.rxBytes + bucket.txBytes
+                        if (bytes <= 0) continue
+                        uidMap[uid] = (uidMap[uid] ?: 0L) + bytes
+                    }
+                    stats.close()
+                } catch (_: Exception) {
+                    // continue
+                }
             }
-            stats.close()
-        } catch (_: Exception) {
-            return@withContext emptyList()
         }
 
         val total = uidMap.values.sum().coerceAtLeast(1L)
         uidMap.mapNotNull { (uid, bytes) ->
-            val pkg = packageManager.getPackagesForUid(uid)?.firstOrNull() ?: return@mapNotNull null
+            if (bytes <= 0) return@mapNotNull null
+            val packages = packageManager.getPackagesForUid(uid) ?: return@mapNotNull null
+            val pkg = packages.firstOrNull() ?: return@mapNotNull null
             val label = try {
                 val ai = packageManager.getApplicationInfo(pkg, 0)
                 packageManager.getApplicationLabel(ai).toString()
@@ -153,33 +218,8 @@ class NetworkStatsRepository @Inject constructor(
         }.sortedByDescending { it.totalBytes }.take(limit)
     }
 
-    suspend fun getTopAppsThisMonth(limit: Int = 20): List<AppUsageRow> =
-        getTopApps(startOfMonth(), System.currentTimeMillis(), limit)
-
-    private fun queryPeriod(start: Long, end: Long): PeriodUsage {
-        if (!hasPermission()) return PeriodUsage(0, start, end)
-        var rx = 0L
-        var tx = 0L
-        try {
-            @Suppress("DEPRECATION")
-            val stats = networkStatsManager.querySummary(
-                ConnectivityManager.TYPE_MOBILE,
-                null,
-                start,
-                end
-            )
-            val bucket = NetworkStats.Bucket()
-            while (stats.hasNextBucket()) {
-                stats.getNextBucket(bucket)
-                rx += bucket.rxBytes
-                tx += bucket.txBytes
-            }
-            stats.close()
-        } catch (_: Exception) {
-            // ignore
-        }
-        return PeriodUsage(rx + tx, start, end)
-    }
+    suspend fun getTopAppsThisMonth(limit: Int = 30): List<AppUsageRow> =
+        getTopApps(startOfMonth(), System.currentTimeMillis(), limit, mobileOnly = true)
 
     fun startOfTodayMs(): Long = startOfToday()
     fun startOfWeekMs(): Long = startOfWeek()

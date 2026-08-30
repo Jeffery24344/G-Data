@@ -24,8 +24,10 @@ data class HomeUiState(
     val hasUsagePermission: Boolean = false,
     val todayBytes: Long = 0L,
     val monthBytes: Long = 0L,
+    val todayWifiBytes: Long = 0L,
     val estimatedSavedBytes: Long = 0L,
     val policySummary: String = "",
+    val dataSourceNote: String = "",
     val bundle: BundleInfo = BundleInfo(),
     val isLoading: Boolean = true
 )
@@ -49,9 +51,15 @@ class HomeViewModel @Inject constructor(
                 modeManager.isGamingModeEnabled,
                 bundleManager.bundleInfo
             ) { mode, enabled, gaming, bundle ->
-                Quad(mode, enabled, gaming, bundle)
-            }.collect { (mode, enabled, gaming, bundle) ->
-                refreshUsage(mode, enabled, gaming, bundle)
+                arrayOf(mode, enabled, gaming, bundle)
+            }.collect { arr ->
+                @Suppress("UNCHECKED_CAST")
+                refreshUsage(
+                    arr[0] as OptimizationMode,
+                    arr[1] as Boolean,
+                    arr[2] as Boolean,
+                    arr[3] as BundleInfo
+                )
             }
         }
         viewModelScope.launch {
@@ -76,12 +84,24 @@ class HomeViewModel @Inject constructor(
         val has = networkStatsRepository.hasPermission()
         var today = 0L
         var month = 0L
+        var wifi = 0L
         if (has) {
-            today = networkStatsRepository.getTodayMobileUsage().totalBytes
-            month = networkStatsRepository.getMonthMobileUsage().totalBytes
+            val t = networkStatsRepository.getTodayMobileUsage()
+            val m = networkStatsRepository.getMonthMobileUsage()
+            today = t.mobileBytes
+            month = m.mobileBytes
+            wifi = t.wifiBytes
         }
         val factor = ModePolicy.estimatedSavingsFactor(mode, enabled && !gaming)
         val saved = (today * factor).toLong()
+
+        val note = when {
+            !has -> "Grant Usage Access for real numbers"
+            today == 0L && wifi == 0L -> "No data recorded yet for today (or stats not available on this device)"
+            today == 0L && wifi > 0L -> "On Wi‑Fi today — mobile total is 0 (normal)"
+            else -> "Today/Month = real mobile usage from Android. Savings = estimate only."
+        }
+
         _uiState.value = HomeUiState(
             mode = mode,
             optimizationEnabled = enabled,
@@ -89,8 +109,10 @@ class HomeViewModel @Inject constructor(
             hasUsagePermission = has,
             todayBytes = today,
             monthBytes = month,
+            todayWifiBytes = wifi,
             estimatedSavedBytes = saved,
             policySummary = ModePolicy.activeSummary(mode, enabled, gaming),
+            dataSourceNote = note,
             bundle = bundle,
             isLoading = false
         )
@@ -103,10 +125,4 @@ class HomeViewModel @Inject constructor(
     fun setOptimizationEnabled(enabled: Boolean) {
         viewModelScope.launch { modeManager.setOptimizationEnabled(enabled) }
     }
-
-    private data class Quad<
-        A, B, C, D
-        >(
-        val a: A, val b: B, val c: C, val d: D
-    )
 }
