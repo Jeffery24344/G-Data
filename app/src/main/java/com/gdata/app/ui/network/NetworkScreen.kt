@@ -99,7 +99,6 @@ fun NetworkScreen(
             }
         }
 
-        // Local VPN
         Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Row(
@@ -113,7 +112,7 @@ fun NetworkScreen(
                         Column {
                             Text("Local VPN", fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (state.vpnRunning) "Active" else "Off",
+                                if (state.vpnRunning) "Connected (system VPN)" else "Off",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (state.vpnRunning) Primary
                                 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -142,8 +141,11 @@ fun NetworkScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Optional local tunnel. No decryption. No traffic sent to our servers. " +
-                        "This version keeps normal internet working; full packet optimization can grow on top of it.",
+                    "Real Android VpnService on your device. " +
+                        "Legal for your own phone. No decryption, no free carrier data, " +
+                        "no traffic uploaded to Big Big Dream. " +
+                        "When on, you should see the key icon in the status bar and " +
+                        "Settings → Network → VPN listing G Data.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
