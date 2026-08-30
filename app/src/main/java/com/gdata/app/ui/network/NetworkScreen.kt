@@ -163,7 +163,7 @@ fun NetworkScreen(
                     else ->
                         Text("No recent test", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.runLatencyTest() },
                     enabled = !state.isTesting,
