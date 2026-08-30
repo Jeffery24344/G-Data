@@ -3,6 +3,7 @@ package com.gdata.app.data.repository
 import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.os.Build
@@ -35,6 +36,8 @@ data class DayUsageRow(
     val dayStart: Long,
     val bytes: Long
 )
+
+enum class AppsPeriod { TODAY, WEEK, MONTH }
 
 @Singleton
 class NetworkStatsRepository @Inject constructor(
@@ -76,20 +79,25 @@ class NetworkStatsRepository @Inject constructor(
             }
         }.timeInMillis
 
-    /** Subscriber IDs to try — some devices need a non-null value. */
+    private fun daysAgo(days: Int): Long =
+        Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, -days)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
     private fun subscriberIds(): List<String?> {
         val ids = mutableListOf<String?>(null, "")
         try {
-            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-            val sid = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                null // restricted without privileged permission
-            } else {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
                 @Suppress("DEPRECATION")
-                tm?.subscriberId
+                val sid = tm?.subscriberId
+                if (!sid.isNullOrBlank()) ids.add(0, sid)
             }
-            if (!sid.isNullOrBlank()) ids.add(0, sid)
         } catch (_: Exception) {
-            // ignore
         }
         return ids.distinct()
     }
@@ -109,7 +117,6 @@ class NetworkStatsRepository @Inject constructor(
                 stats.close()
                 if (sum > total) total = sum
             } catch (_: Exception) {
-                // try next subscriber
             }
         }
         return total
@@ -119,13 +126,7 @@ class NetworkStatsRepository @Inject constructor(
         if (!hasPermission()) return PeriodUsage(0, 0, 0, start, end)
         val mobile = queryNetworkType(ConnectivityManager.TYPE_MOBILE, start, end)
         val wifi = queryNetworkType(ConnectivityManager.TYPE_WIFI, start, end)
-        return PeriodUsage(
-            totalBytes = mobile, // primary metric for data-saver app is mobile
-            mobileBytes = mobile,
-            wifiBytes = wifi,
-            startTime = start,
-            endTime = end
-        )
+        return PeriodUsage(mobile, mobile, wifi, start, end)
     }
 
     suspend fun getTodayMobileUsage(): PeriodUsage = withContext(Dispatchers.IO) {
@@ -166,19 +167,48 @@ class NetworkStatsRepository @Inject constructor(
         result
     }
 
+    /**
+     * Per-app usage. Tries mobile first; if empty, falls back to mobile+Wi-Fi
+     * so recently used apps still appear when the user was on Wi-Fi.
+     */
     suspend fun getTopApps(
-        start: Long,
-        end: Long,
-        limit: Int = 30,
-        mobileOnly: Boolean = true
+        period: AppsPeriod = AppsPeriod.MONTH,
+        limit: Int = 50,
+        includeWifi: Boolean = true
     ): List<AppUsageRow> = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext emptyList()
+
+        val end = System.currentTimeMillis()
+        val start = when (period) {
+            AppsPeriod.TODAY -> startOfToday()
+            AppsPeriod.WEEK -> daysAgo(7)
+            AppsPeriod.MONTH -> daysAgo(30)
+        }
+
+        var rows = collectApps(start, end, mobileOnly = true, limit = limit)
+        if (rows.isEmpty() && includeWifi) {
+            rows = collectApps(start, end, mobileOnly = false, limit = limit)
+        }
+        // Last resort: widen window to 90 days
+        if (rows.isEmpty()) {
+            rows = collectApps(daysAgo(90), end, mobileOnly = false, limit = limit)
+        }
+        rows
+    }
+
+    private fun collectApps(
+        start: Long,
+        end: Long,
+        mobileOnly: Boolean,
+        limit: Int
+    ): List<AppUsageRow> {
         val uidMap = mutableMapOf<Int, Long>()
         val types = if (mobileOnly) {
             listOf(ConnectivityManager.TYPE_MOBILE)
         } else {
             listOf(ConnectivityManager.TYPE_MOBILE, ConnectivityManager.TYPE_WIFI)
         }
+
         for (type in types) {
             for (subscriber in subscriberIds()) {
                 try {
@@ -188,38 +218,54 @@ class NetworkStatsRepository @Inject constructor(
                     while (stats.hasNextBucket()) {
                         stats.getNextBucket(bucket)
                         val uid = bucket.uid
-                        if (uid == NetworkStats.Bucket.UID_ALL ||
+                        if (uid < 0 ||
+                            uid == NetworkStats.Bucket.UID_ALL ||
                             uid == NetworkStats.Bucket.UID_REMOVED ||
                             uid == NetworkStats.Bucket.UID_TETHERING
                         ) continue
                         val bytes = bucket.rxBytes + bucket.txBytes
-                        if (bytes <= 0) continue
+                        if (bytes <= 0L) continue
                         uidMap[uid] = (uidMap[uid] ?: 0L) + bytes
                     }
                     stats.close()
                 } catch (_: Exception) {
-                    // continue
                 }
             }
         }
 
+        if (uidMap.isEmpty()) return emptyList()
+
         val total = uidMap.values.sum().coerceAtLeast(1L)
-        uidMap.mapNotNull { (uid, bytes) ->
-            if (bytes <= 0) return@mapNotNull null
+        return uidMap.mapNotNull { (uid, bytes) ->
             val packages = packageManager.getPackagesForUid(uid) ?: return@mapNotNull null
-            val pkg = packages.firstOrNull() ?: return@mapNotNull null
+            // Prefer non-system launcher label when multiple packages share a UID
+            val pkg = packages.maxByOrNull { p ->
+                try {
+                    val ai = packageManager.getApplicationInfo(p, 0)
+                    if (ai.flags and ApplicationInfo.FLAG_SYSTEM == 0) 2 else 1
+                } catch (_: Exception) {
+                    0
+                }
+            } ?: packages.first()
+
             val label = try {
                 val ai = packageManager.getApplicationInfo(pkg, 0)
                 packageManager.getApplicationLabel(ai).toString()
             } catch (_: PackageManager.NameNotFoundException) {
                 pkg
             }
-            AppUsageRow(pkg, label, bytes, (bytes.toFloat() / total) * 100f)
+
+            AppUsageRow(
+                packageName = pkg,
+                appName = label,
+                totalBytes = bytes,
+                percentage = (bytes.toFloat() / total) * 100f
+            )
         }.sortedByDescending { it.totalBytes }.take(limit)
     }
 
-    suspend fun getTopAppsThisMonth(limit: Int = 30): List<AppUsageRow> =
-        getTopApps(startOfMonth(), System.currentTimeMillis(), limit, mobileOnly = true)
+    suspend fun getTopAppsThisMonth(limit: Int = 50): List<AppUsageRow> =
+        getTopApps(AppsPeriod.MONTH, limit, includeWifi = true)
 
     fun startOfTodayMs(): Long = startOfToday()
     fun startOfWeekMs(): Long = startOfWeek()
