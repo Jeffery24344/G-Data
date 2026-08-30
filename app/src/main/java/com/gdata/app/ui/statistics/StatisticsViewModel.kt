@@ -3,6 +3,7 @@ package com.gdata.app.ui.statistics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gdata.app.data.repository.AppUsageRow
+import com.gdata.app.data.repository.AppsPeriod
 import com.gdata.app.data.repository.DayUsageRow
 import com.gdata.app.data.repository.NetworkStatsRepository
 import com.gdata.app.domain.manager.ModeManager
@@ -61,17 +62,23 @@ class StatisticsViewModel @Inject constructor(
                 return@launch
             }
 
-            val now = System.currentTimeMillis()
-            val (usage, start) = when (period) {
-                StatsPeriod.TODAY ->
-                    networkStatsRepository.getTodayMobileUsage() to networkStatsRepository.startOfTodayMs()
-                StatsPeriod.WEEK ->
-                    networkStatsRepository.getWeekMobileUsage() to networkStatsRepository.startOfWeekMs()
-                StatsPeriod.MONTH ->
-                    networkStatsRepository.getMonthMobileUsage() to networkStatsRepository.startOfMonthMs()
+            val usage = when (period) {
+                StatsPeriod.TODAY -> networkStatsRepository.getTodayMobileUsage()
+                StatsPeriod.WEEK -> networkStatsRepository.getWeekMobileUsage()
+                StatsPeriod.MONTH -> networkStatsRepository.getMonthMobileUsage()
             }
 
-            val top = networkStatsRepository.getTopApps(start, now, limit = 5)
+            val appsPeriod = when (period) {
+                StatsPeriod.TODAY -> AppsPeriod.TODAY
+                StatsPeriod.WEEK -> AppsPeriod.WEEK
+                StatsPeriod.MONTH -> AppsPeriod.MONTH
+            }
+
+            val top = networkStatsRepository.getTopApps(
+                period = appsPeriod,
+                limit = 5,
+                includeWifi = true
+            )
             val daily = if (period == StatsPeriod.WEEK || period == StatsPeriod.TODAY) {
                 networkStatsRepository.getLast7DaysBreakdown()
             } else {
