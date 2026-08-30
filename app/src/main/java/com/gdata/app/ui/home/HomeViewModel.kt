@@ -9,9 +9,13 @@ import com.gdata.app.domain.manager.ModeManager
 import com.gdata.app.domain.model.BundleInfo
 import com.gdata.app.domain.model.ModePolicy
 import com.gdata.app.domain.model.OptimizationMode
+import com.gdata.app.notification.GDataNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
@@ -37,11 +41,15 @@ class HomeViewModel @Inject constructor(
     private val modeManager: ModeManager,
     private val bundleManager: BundleManager,
     private val networkStatsRepository: NetworkStatsRepository,
-    private val rulesEngine: RulesEngine
+    private val rulesEngine: RulesEngine,
+    private val notifications: GDataNotificationHelper
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    private val _events = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val events: SharedFlow<String> = _events.asSharedFlow()
 
     init {
         viewModelScope.launch {
@@ -99,7 +107,7 @@ class HomeViewModel @Inject constructor(
             !has -> "Grant Usage Access for real numbers"
             today == 0L && wifi == 0L -> "No data recorded yet for today (or stats not available on this device)"
             today == 0L && wifi > 0L -> "On Wi‑Fi today — mobile total is 0 (normal)"
-            else -> "Today/Month = real mobile usage from Android. Savings = estimate only."
+            else -> "Today/Month = real mobile usage. Savings = estimate only."
         }
 
         _uiState.value = HomeUiState(
@@ -119,10 +127,23 @@ class HomeViewModel @Inject constructor(
     }
 
     fun setMode(mode: OptimizationMode) {
-        viewModelScope.launch { modeManager.setMode(mode) }
+        viewModelScope.launch {
+            modeManager.setMode(mode)
+            val msg = "${mode.displayName} applied"
+            _events.emit(msg)
+            notifications.notifyUsage(
+                "Mode: ${mode.displayName}",
+                ModePolicy.activeSummary(mode, true, false)
+            )
+        }
     }
 
     fun setOptimizationEnabled(enabled: Boolean) {
-        viewModelScope.launch { modeManager.setOptimizationEnabled(enabled) }
+        viewModelScope.launch {
+            modeManager.setOptimizationEnabled(enabled)
+            val msg = if (enabled) "Optimization ON" else "Optimization paused"
+            _events.emit(msg)
+            notifications.notifyUsage(msg, "G Data policy updated")
+        }
     }
 }
