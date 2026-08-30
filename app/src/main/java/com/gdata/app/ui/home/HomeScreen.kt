@@ -19,12 +19,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +51,13 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -57,165 +69,179 @@ fun HomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Text(
-            text = if (state.gamingMode) "Gaming Mode 🎮" else state.mode.displayName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = state.policySummary,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(
+                text = if (state.gamingMode) "Gaming Mode 🎮" else state.mode.displayName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = state.policySummary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-        if (!state.hasUsagePermission) {
+            // Active mode banner
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.12f))
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.15f))
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = "Usage Access required", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        text = "Without this, Home and Apps cannot read real usage.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            context.startActivity(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(text = "Open Usage Access")
+                Text(
+                    text = "Active now: ${if (state.gamingMode) "Gaming → Performance" else state.mode.displayName}" +
+                        if (state.optimizationEnabled) " · Optimization ON" else " · Optimization OFF",
+                    modifier = Modifier.padding(14.dp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = Primary
+                )
+            }
+
+            if (!state.hasUsagePermission) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.12f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = "Usage Access required", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "Without this, Home and Apps cannot read real usage.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(text = "Open Usage Access")
+                        }
                     }
                 }
             }
-        }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            )
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                )
             ) {
-                UsageRow(label = "Today (mobile)", value = DataFormat.formatBytes(state.todayBytes))
-                UsageRow(label = "This month (mobile)", value = DataFormat.formatBytes(state.monthBytes))
-                HorizontalDivider()
-                UsageRow(
-                    label = "Estimated savings",
-                    value = DataFormat.formatBytes(state.estimatedSavedBytes),
-                    highlight = true
-                )
-                Text(
-                    text = state.dataSourceNote,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "Estimated savings is NOT measured cut data. " +
-                        "It is a mode-based estimate only. Real cuts need system Data Saver + less usage.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    UsageRow(label = "Today (mobile)", value = DataFormat.formatBytes(state.todayBytes))
+                    UsageRow(label = "This month (mobile)", value = DataFormat.formatBytes(state.monthBytes))
+                    HorizontalDivider()
+                    UsageRow(
+                        label = "Estimated savings",
+                        value = DataFormat.formatBytes(state.estimatedSavedBytes),
+                        highlight = true
+                    )
+                    Text(
+                        text = state.dataSourceNote,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        }
 
-        if (state.bundle.isValid) {
+            if (state.bundle.isValid) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(text = "Remaining Data", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            text = DataFormat.formatBytes(state.bundle.remainingBytes),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Primary
+                        )
+                        if (state.bundle.daysLeft > 0) {
+                            Text(
+                                text = "${state.bundle.daysLeft} days left • ${DataFormat.formatBytes(state.bundle.recommendedDailyBytes)}/day",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(text = "Remaining Data", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        text = DataFormat.formatBytes(state.bundle.remainingBytes),
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Primary
-                    )
-                    if (state.bundle.daysLeft > 0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(text = "DATA OPTIMIZATION", fontWeight = FontWeight.Bold)
                         Text(
-                            text = "${state.bundle.daysLeft} days left • ${DataFormat.formatBytes(state.bundle.recommendedDailyBytes)}/day",
+                            text = if (state.optimizationEnabled) "Active" else "Paused",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (state.optimizationEnabled) Primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(text = "DATA OPTIMIZATION", fontWeight = FontWeight.Bold)
-                    Text(
-                        text = if (state.optimizationEnabled) "Active" else "Paused",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (state.optimizationEnabled) Primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    Switch(
+                        checked = state.optimizationEnabled,
+                        onCheckedChange = { viewModel.setOptimizationEnabled(it) },
+                        colors = SwitchDefaults.colors(checkedTrackColor = Primary)
                     )
                 }
-                Switch(
-                    checked = state.optimizationEnabled,
-                    onCheckedChange = { viewModel.setOptimizationEnabled(it) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = Primary)
+            }
+
+            Text(text = "Optimization Mode", style = MaterialTheme.typography.titleMedium)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ModeChip(
+                    label = "Performance",
+                    selected = state.mode == OptimizationMode.PERFORMANCE && !state.gamingMode,
+                    onClick = { viewModel.setMode(OptimizationMode.PERFORMANCE) },
+                    modifier = Modifier.weight(1f)
+                )
+                ModeChip(
+                    label = "Balanced",
+                    selected = state.mode == OptimizationMode.BALANCED && !state.gamingMode,
+                    onClick = { viewModel.setMode(OptimizationMode.BALANCED) },
+                    modifier = Modifier.weight(1f)
+                )
+                ModeChip(
+                    label = "Extreme",
+                    selected = state.mode == OptimizationMode.EXTREME && !state.gamingMode,
+                    onClick = { viewModel.setMode(OptimizationMode.EXTREME) },
+                    modifier = Modifier.weight(1f)
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
         }
-
-        Text(text = "Optimization Mode", style = MaterialTheme.typography.titleMedium)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ModeChip(
-                label = "Performance",
-                selected = state.mode == OptimizationMode.PERFORMANCE && !state.gamingMode,
-                onClick = { viewModel.setMode(OptimizationMode.PERFORMANCE) },
-                modifier = Modifier.weight(1f)
-            )
-            ModeChip(
-                label = "Balanced",
-                selected = state.mode == OptimizationMode.BALANCED && !state.gamingMode,
-                onClick = { viewModel.setMode(OptimizationMode.BALANCED) },
-                modifier = Modifier.weight(1f)
-            )
-            ModeChip(
-                label = "Extreme",
-                selected = state.mode == OptimizationMode.EXTREME && !state.gamingMode,
-                onClick = { viewModel.setMode(OptimizationMode.EXTREME) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
     }
 }
 
